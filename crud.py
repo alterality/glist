@@ -62,3 +62,19 @@ def create_room(db: Session, room: schemas.RoomCreate, owner_id: int):
 
 def get_room(db: Session, room_id: int):
     return db.query(models.Room).filter(models.Room.id == room_id).first()
+
+def get_room_users(room_id: int, db: Session):
+    room_users = db.query(models.RoomUser).filter(models.RoomUser.room_id == room_id).all()
+    user_ids = [ru.user_id for ru in room_users]
+    users = db.query(models.User).filter(models.User.id.in_(user_ids)).all()
+    return users
+
+def create_message(db: Session, message_data: schemas.MessageCreate, user_id: int, room_id: int):
+    db_message = models.Message(**message_data.dict(), user_id=user_id, room_id=room_id)
+    db.add(db_message)
+    db.commit()
+    db.refresh(db_message)
+    return db_message
+
+def get_room_messages(db: Session, room_id: int):
+    return db.query(models.Message).filter(models.Message.room_id == room_id).all()

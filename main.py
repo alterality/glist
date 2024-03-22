@@ -135,7 +135,7 @@ async def mark_ready(room_id: int, db: Session = Depends(get_db), current_user: 
     if current_user.id not in room_ready_state[room_id]:
         room_ready_state[room_id].append(current_user.id)
     
-    if all_ready(room_id):
+    if all_ready(room_id, db): 
         task = generate_task()
         for connection in active_connections[room_id]:
             await connection.send_text(f"Начало задачи: {task}")
@@ -146,3 +146,32 @@ async def mark_ready(room_id: int, db: Session = Depends(get_db), current_user: 
 async def end_task(room_id: int):
     for connection in active_connections[room_id]:
         await connection.send_text("Время вышло. Проверка решений...")
+
+
+@app.post("/rooms/{room_id}/messages/", response_model=schemas.Message)
+def create_room_message(room_id: int, message: schemas.MessageCreate, db: Session = Depends(get_db), current_user: schemas.UserBase = Depends(get_current_user)):
+    return crud.create_message(db=db, message_data=message, user_id=current_user.id, room_id=room_id)
+
+@app.get("/rooms/{room_id}/messages/")
+def read_room_messages(room_id: int, db: Session = Depends(get_db)):
+    return crud.get_room_messages(db=db, room_id=room_id)
+
+@app.get("/rooms/{room_id}", response_model=schemas.Room)
+def get_room(room_id: int, db: Session = Depends(get_db)):
+    db_room = crud.get_room(db, room_id=room_id)
+    if db_room is None:
+        raise HTTPException(status_code=404, detail="Room not found")
+    return db_room
+
+@app.post("/rooms/{room_id}/connect")
+def connect_to_room(room_id: int, db: Session = Depends(get_db), current_user: schemas.UserBase = Depends(get_current_user)):
+    db_room = crud.get_room(db, room_id=room_id)
+    if db_room is None:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if db_room.guest_id is not None:
+        raise HTTPException(status_code=400, detail="Room is already occupied")
+
+    db_room.guest_id = current_user.id
+    db.commit()
+
+    return {"message": "Connected to the room"}
